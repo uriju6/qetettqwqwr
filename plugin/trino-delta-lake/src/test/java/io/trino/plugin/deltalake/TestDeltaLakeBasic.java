@@ -15,6 +15,7 @@ package io.trino.plugin.deltalake;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -206,6 +207,58 @@ public class TestDeltaLakeBasic
         Assertions.assertThat(thirdMetadata.getSchemaString())
                 .containsPattern("(delta\\.columnMapping\\.id.*?){11}")
                 .containsPattern("(delta\\.columnMapping\\.physicalName.*?){11}");
+    }
+
+    /**
+     * @see deltalake.column_mapping_mode_id
+     * @see deltalake.column_mapping_mode_name
+     */
+    @Test(dataProvider = "columnMappingModeDataProvider")
+    public void testRenameColumnWithColumnMappingMode(String columnMappingMode)
+            throws Exception
+    {
+        // The table contains 'x' column with column mapping mode
+        String tableName = "test_rename_column_" + randomNameSuffix();
+        Path tableLocation = Files.createTempFile(tableName, null);
+        copyDirectoryContents(new File(Resources.getResource("deltalake/column_mapping_mode_" + columnMappingMode).toURI()).toPath(), tableLocation);
+
+        assertUpdate("CALL system.register_table('%s', '%s', '%s')".formatted(getSession().getSchema().orElseThrow(), tableName, tableLocation.toUri()));
+        assertThat(query("DESCRIBE " + tableName)).projected("Column", "Type").skippingTypesCheck().matches("VALUES ('x', 'integer')");
+        assertQueryReturnsEmptyResult("SELECT * FROM " + tableName);
+
+        assertUpdate("ALTER TABLE " + tableName + " ADD COLUMN second_col row(a array(integer), b map(integer, integer), c row(field integer))");
+        MetadataEntry metadata = loadMetadataEntry(1, tableLocation);
+        Assertions.assertThat(metadata.getConfiguration().get("delta.columnMapping.maxColumnId"))
+                .isEqualTo("6"); // +5 comes from second_col + second_col.a + second_col.b + second_col.c + second_col.c.field
+        Assertions.assertThat(metadata.getSchemaString())
+                .containsPattern("(delta\\.columnMapping\\.id.*?){6}")
+                .containsPattern("(delta\\.columnMapping\\.physicalName.*?){6}");
+
+        JsonNode schema = OBJECT_MAPPER.readTree(metadata.getSchemaString());
+        List<JsonNode> fields = ImmutableList.copyOf(schema.get("fields").elements());
+        Assertions.assertThat(fields).hasSize(2);
+        JsonNode integerColumn = fields.get(0);
+        JsonNode nestedColumn = fields.get(1);
+        List<JsonNode> rowFields = ImmutableList.copyOf(nestedColumn.get("type").get("fields").elements());
+        Assertions.assertThat(rowFields).hasSize(3);
+
+        // Rename 'second_col' column and verify that nested metadata are same except for 'name' field and the table configuration are preserved
+        assertUpdate("ALTER TABLE " + tableName + " RENAME COLUMN second_col TO renamed_col");
+
+        MetadataEntry renamedMetadata = loadMetadataEntry(2, tableLocation);
+        JsonNode renamedSchema = OBJECT_MAPPER.readTree(renamedMetadata.getSchemaString());
+        List<JsonNode> renamedFields = ImmutableList.copyOf(renamedSchema.get("fields").elements());
+        Assertions.assertThat(renamedFields).hasSize(2);
+        Assertions.assertThat(renamedFields.get(0)).isEqualTo(integerColumn);
+        Assertions.assertThat(renamedFields.get(1)).isNotEqualTo(nestedColumn);
+        JsonNode renamedColumn = ((ObjectNode) nestedColumn).put("name", "renamed_col");
+        Assertions.assertThat(renamedFields.get(1)).isEqualTo(renamedColumn);
+
+        Assertions.assertThat(renamedMetadata.getConfiguration())
+                .isEqualTo(metadata.getConfiguration());
+        Assertions.assertThat(renamedMetadata.getSchemaString())
+                .containsPattern("(delta\\.columnMapping\\.id.*?){6}")
+                .containsPattern("(delta\\.columnMapping\\.physicalName.*?){6}");
     }
 
     @DataProvider
