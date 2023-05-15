@@ -67,7 +67,10 @@ import static io.trino.spi.type.IntegerType.INTEGER;
 import static io.trino.spi.type.RealType.REAL;
 import static io.trino.spi.type.SmallintType.SMALLINT;
 import static io.trino.spi.type.TimeZoneKey.UTC_KEY;
+import static io.trino.spi.type.TimestampType.TIMESTAMP_MICROS;
 import static io.trino.spi.type.TimestampWithTimeZoneType.createTimestampWithTimeZoneType;
+import static io.trino.spi.type.Timestamps.MICROSECONDS_PER_SECOND;
+import static io.trino.spi.type.Timestamps.NANOSECONDS_PER_MICROSECOND;
 import static io.trino.spi.type.TinyintType.TINYINT;
 import static io.trino.spi.type.VarcharType.VARCHAR;
 import static java.lang.Double.parseDouble;
@@ -153,16 +156,22 @@ public final class TransactionLogParser
     @Nullable
     public static Object deserializePartitionValue(DeltaLakeColumnHandle column, Optional<String> valueString)
     {
-        return valueString.map(value -> deserializeColumnValue(column, value, TransactionLogParser::readPartitionTimestamp)).orElse(null);
+        return valueString.map(value -> deserializeColumnValue(column, value, TransactionLogParser::readPartitionTimestamp, TransactionLogParser::readPartitionTimestampWithZone)).orElse(null);
     }
 
     private static Long readPartitionTimestamp(String timestamp)
+    {
+        LocalDateTime localDateTime = LocalDateTime.parse(timestamp, PARTITION_TIMESTAMP_FORMATTER);
+        return localDateTime.toEpochSecond(UTC) * MICROSECONDS_PER_SECOND + localDateTime.getNano() / NANOSECONDS_PER_MICROSECOND;
+    }
+
+    private static Long readPartitionTimestampWithZone(String timestamp)
     {
         ZonedDateTime zonedDateTime = LocalDateTime.parse(timestamp, PARTITION_TIMESTAMP_FORMATTER).atZone(UTC);
         return packDateTimeWithZone(zonedDateTime.toInstant().toEpochMilli(), UTC_KEY);
     }
 
-    public static Object deserializeColumnValue(DeltaLakeColumnHandle column, String valueString, Function<String, Long> timestampReader)
+    public static Object deserializeColumnValue(DeltaLakeColumnHandle column, String valueString, Function<String, Long> timestampReader, Function<String, Long> timestampWithZoneReader)
     {
         verify(column.isBaseColumn(), "Unexpected dereference: %s", column);
         Type type = column.getBaseType();
@@ -200,8 +209,11 @@ public final class TransactionLogParser
                 // date values are represented as yyyy-MM-dd
                 return LocalDate.parse(valueString).toEpochDay();
             }
-            if (type.equals(createTimestampWithTimeZoneType(3))) {
+            if (type.equals(TIMESTAMP_MICROS)) {
                 return timestampReader.apply(valueString);
+            }
+            if (type.equals(createTimestampWithTimeZoneType(3))) {
+                return timestampWithZoneReader.apply(valueString);
             }
             if (VARCHAR.equals(type)) {
                 return utf8Slice(valueString);
