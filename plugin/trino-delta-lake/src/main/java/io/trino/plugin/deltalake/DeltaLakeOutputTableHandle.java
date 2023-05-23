@@ -134,4 +134,10 @@ public class DeltaLakeOutputTableHandle
     {
         return protocolEntry;
     }
+
+    @Override
+    public String toString()
+    {
+        return schemaName + "." + tableName + "[" + location + "]";
+    }
 }

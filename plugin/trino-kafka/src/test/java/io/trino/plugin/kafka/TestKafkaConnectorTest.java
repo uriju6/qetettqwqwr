@@ -489,6 +489,14 @@ public class TestKafkaConnectorTest
     }
 
     @Override
+    public void testInsertTableNameInExplain()
+    {
+        assertExplain(
+                "EXPLAIN INSERT INTO " + TABLE_INSERT_CUSTOMER + " VALUES (NULL, NULL, NULL)",
+                "(?i)" + TABLE_INSERT_CUSTOMER);
+    }
+
+    @Override
     public void testInsertRowConcurrently()
     {
         throw new SkipException("TODO Prepare a topic in Kafka and enable this test");
