@@ -262,12 +262,33 @@ public final class PropertyMetadata<T>
 
     public static <T extends Enum<T>> PropertyMetadata<T> enumProperty(String name, String descriptionPrefix, Class<T> type, T defaultValue, Consumer<T> validation, boolean hidden)
     {
-        String allValues = EnumSet.allOf(type).stream()
+        return enumProperty(name, descriptionPrefix, type, EnumSet.allOf(type), defaultValue, validation, hidden);
+    }
+
+    public static <T extends Enum<T>> PropertyMetadata<T> enumProperty(String name, String descriptionPrefix, Class<T> type, EnumSet<T> allowedValues, T defaultValue, boolean hidden)
+    {
+        return enumProperty(name, descriptionPrefix, type, allowedValues, defaultValue, value -> {}, hidden);
+    }
+
+    public static <T extends Enum<T>> PropertyMetadata<T> enumProperty(
+            String name,
+            String descriptionPrefix,
+            Class<T> type,
+            EnumSet<T> validValues,
+            T defaultValue,
+            Consumer<T> validation,
+            boolean hidden)
+    {
+        if (defaultValue != null && !validValues.contains(defaultValue)) {
+            throw new IllegalArgumentException("Default value '%s' must exist in [%s]".formatted(defaultValue, validValues));
+        }
+
+        String possibleValues = validValues.stream()
                 .map(Enum::name)
                 .collect(joining(", ", "[", "]"));
         return new PropertyMetadata<>(
                 name,
-                format("%s. Possible values: %s", descriptionPrefix, allValues),
+                format("%s. Possible values: %s", descriptionPrefix, possibleValues),
                 createUnboundedVarcharType(),
                 type,
                 defaultValue,
@@ -278,7 +299,10 @@ public final class PropertyMetadata<T>
                         enumValue = Enum.valueOf(type, ((String) value).toUpperCase(ENGLISH));
                     }
                     catch (IllegalArgumentException e) {
-                        throw new IllegalArgumentException(format("Invalid value [%s]. Valid values: %s", value, allValues), e);
+                        throw new IllegalArgumentException(format("Invalid value [%s]. Valid values: %s", value, possibleValues), e);
+                    }
+                    if (!validValues.contains(enumValue)) {
+                        throw new IllegalArgumentException(format("Invalid value [%s]. Valid values: %s", value, validValues));
                     }
                     validation.accept(enumValue);
                     return enumValue;
