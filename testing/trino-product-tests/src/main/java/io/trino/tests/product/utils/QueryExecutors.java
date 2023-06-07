@@ -126,7 +126,7 @@ public final class QueryExecutors
 
         return new QueryExecutor()
         {
-            private final QueryExecutor delegate = testContext().getDependency(QueryExecutor.class, "delta");
+            private final QueryExecutor delegate = new DeltaQueryExecutor(testContext());
 
             @Override
             public QueryResult executeQuery(String sql, QueryParam... params)

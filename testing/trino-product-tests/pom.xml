@@ -31,6 +31,11 @@
     <dependencies>
         <dependency>
             <groupId>io.trino</groupId>
+            <artifactId>trino-collect</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.trino</groupId>
             <artifactId>trino-hive</artifactId>
             <exclusions>
                 <exclusion>
@@ -128,6 +133,11 @@
         <dependency>
             <groupId>io.airlift</groupId>
             <artifactId>units</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.airlift.resolver</groupId>
+            <artifactId>resolver</artifactId>
         </dependency>
 
         <dependency>
@@ -235,6 +245,11 @@
         </dependency>
 
         <dependency>
+            <groupId>org.sonatype.aether</groupId>
+            <artifactId>aether-api</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
         </dependency>
@@ -259,8 +274,9 @@
         </dependency>
 
         <dependency>
-            <groupId>com.databricks</groupId>
-            <artifactId>databricks-jdbc</artifactId>
+            <groupId>com.linkedin.calcite</groupId>
+            <artifactId>calcite-core</artifactId>
+            <classifier>shaded</classifier>
             <scope>runtime</scope>
         </dependency>
 
