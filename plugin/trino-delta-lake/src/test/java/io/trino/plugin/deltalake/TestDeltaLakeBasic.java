@@ -64,7 +64,7 @@ public class TestDeltaLakeBasic
 
     private static final List<String> PERSON_TABLES = ImmutableList.of(
             "person", "person_without_last_checkpoint", "person_without_old_jsons", "person_without_checkpoints");
-    private static final List<String> OTHER_TABLES = ImmutableList.of("no_column_stats");
+    private static final List<String> OTHER_TABLES = ImmutableList.of("no_column_stats", "deletion_vectors");
 
     // The col-{uuid} pattern for delta.columnMapping.physicalName
     private static final Pattern PHYSICAL_COLUMN_NAME_PATTERN = Pattern.compile("^col-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
@@ -215,6 +215,15 @@ public class TestDeltaLakeBasic
                 {"id"},
                 {"name"},
         };
+    }
+
+    /**
+     * @see databricks.deletion_vectors
+     */
+    @Test
+    public void testDeletionVectors()
+    {
+        assertQuery("SELECT * FROM deletion_vectors", "VALUES (1, 11)");
     }
 
     @Test

@@ -22,6 +22,7 @@ import io.trino.plugin.deltalake.DeltaLakeColumnHandle;
 import io.trino.plugin.deltalake.DeltaLakeColumnMetadata;
 import io.trino.plugin.deltalake.transactionlog.AddFileEntry;
 import io.trino.plugin.deltalake.transactionlog.CommitInfoEntry;
+import io.trino.plugin.deltalake.transactionlog.DeletionVectorEntry;
 import io.trino.plugin.deltalake.transactionlog.DeltaLakeTransactionLogEntry;
 import io.trino.plugin.deltalake.transactionlog.MetadataEntry;
 import io.trino.plugin.deltalake.transactionlog.ProtocolEntry;
@@ -72,6 +73,7 @@ import static com.google.common.collect.Iterables.getOnlyElement;
 import static io.trino.plugin.deltalake.DeltaLakeColumnType.REGULAR;
 import static io.trino.plugin.deltalake.DeltaLakeErrorCode.DELTA_LAKE_BAD_DATA;
 import static io.trino.plugin.deltalake.DeltaLakeErrorCode.DELTA_LAKE_INVALID_SCHEMA;
+import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.deletionVectorsEnabled;
 import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.extractSchema;
 import static io.trino.plugin.deltalake.transactionlog.TransactionLogAccess.columnsWithStats;
 import static io.trino.plugin.deltalake.transactionlog.TransactionLogParser.START_OF_MODERN_ERA;
@@ -359,38 +361,46 @@ public class CheckpointEntryIterator
         if (block.isNull(pagePosition)) {
             return null;
         }
+        boolean deletionVectorsEnabled = deletionVectorsEnabled(metadataEntry.getConfiguration());
         Block addEntryBlock = block.getObject(pagePosition, Block.class);
         log.debug("Block %s has %s fields", block, addEntryBlock.getPositionCount());
 
-        Map<String, String> partitionValues = getMap(addEntryBlock, 1);
-        long size = getLong(addEntryBlock, 2);
-        long modificationTime = getLong(addEntryBlock, 3);
-        boolean dataChange = getByte(addEntryBlock, 4) != 0;
-        Map<String, String> tags = getMap(addEntryBlock, 7);
-
-        String path = getString(addEntryBlock, 0);
-        AddFileEntry result;
-        if (!addEntryBlock.isNull(6)) {
-            result = new AddFileEntry(
-                    path,
-                    partitionValues,
-                    size,
-                    modificationTime,
-                    dataChange,
-                    Optional.empty(),
-                    Optional.of(parseStatisticsFromParquet(addEntryBlock.getObject(6, Block.class))),
-                    tags);
+        int position = 0;
+        String path = getString(addEntryBlock, position++);
+        Map<String, String> partitionValues = getMap(addEntryBlock, position++);
+        long size = getLong(addEntryBlock, position++);
+        long modificationTime = getLong(addEntryBlock, position++);
+        boolean dataChange = getByte(addEntryBlock, position++) != 0;
+        Optional<DeletionVectorEntry> deletionVector = Optional.empty();
+        if (deletionVectorsEnabled) {
+            deletionVector = Optional.of(parseDeletionVectorFromParquet(addEntryBlock.getObject(position++, Block.class)));
         }
-        else if (!addEntryBlock.isNull(5)) {
+        Map<String, String> tags = getMap(addEntryBlock, position + 2);
+
+        AddFileEntry result;
+        if (!addEntryBlock.isNull(position + 1)) {
             result = new AddFileEntry(
                     path,
                     partitionValues,
                     size,
                     modificationTime,
                     dataChange,
-                    Optional.of(getString(addEntryBlock, 5)),
                     Optional.empty(),
-                    tags);
+                    Optional.of(parseStatisticsFromParquet(addEntryBlock.getObject(position + 1, Block.class))),
+                    tags,
+                    deletionVector);
+        }
+        else if (!addEntryBlock.isNull(position)) {
+            result = new AddFileEntry(
+                    path,
+                    partitionValues,
+                    size,
+                    modificationTime,
+                    dataChange,
+                    Optional.of(getString(addEntryBlock, position)),
+                    Optional.empty(),
+                    tags,
+                    deletionVector);
         }
         else {
             result = new AddFileEntry(
@@ -401,11 +411,26 @@ public class CheckpointEntryIterator
                     dataChange,
                     Optional.empty(),
                     Optional.empty(),
-                    tags);
+                    tags,
+                    deletionVector);
         }
 
         log.debug("Result: %s", result);
         return DeltaLakeTransactionLogEntry.addFileEntry(result);
+    }
+
+    private DeletionVectorEntry parseDeletionVectorFromParquet(Block block)
+    {
+        int size = block.getPositionCount();
+        checkArgument(size == 4 || size == 5, "Deletion vector entry must have 4 or 5 fields");
+
+        int position = 0;
+        String storageType = getString(block, position++);
+        String pathOrInlineDv = getString(block, position++);
+        OptionalInt offset = size == 4 ? OptionalInt.empty() : OptionalInt.of(getInt(block, position++));
+        int sizeInBytes = getInt(block, position++);
+        long cardinality = getLong(block, position++);
+        return new DeletionVectorEntry(storageType, pathOrInlineDv, offset, sizeInBytes, cardinality);
     }
 
     private DeltaLakeParquetFileStatistics parseStatisticsFromParquet(Block statsRowBlock)

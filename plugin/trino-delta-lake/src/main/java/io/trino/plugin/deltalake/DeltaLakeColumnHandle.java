@@ -218,6 +218,11 @@ public class DeltaLakeColumnHandle
                 Optional.empty());
     }
 
+    public static DeltaLakeColumnHandle rowIdColumnHandle()
+    {
+        return new DeltaLakeColumnHandle(ROW_ID_COLUMN_NAME, BIGINT, OptionalInt.empty(), ROW_ID_COLUMN_NAME, BIGINT, SYNTHESIZED, Optional.empty());
+    }
+
     public static DeltaLakeColumnHandle pathColumnHandle()
     {
         return new DeltaLakeColumnHandle(PATH_COLUMN_NAME, PATH_TYPE, OptionalInt.empty(), PATH_COLUMN_NAME, PATH_TYPE, SYNTHESIZED, Optional.empty());

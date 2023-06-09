@@ -129,7 +129,8 @@ public class TestCheckpointEntryIterator
                                 "\"nullCount\":{\"name\":0,\"married\":0,\"phones\":0,\"address\":{\"street\":0,\"city\":0,\"state\":0,\"zip\":0},\"income\":0}" +
                                 "}"),
                         Optional.empty(),
-                        null));
+                        null,
+                        Optional.empty()));
 
         assertThat(entries).element(7).extracting(DeltaLakeTransactionLogEntry::getAdd).isEqualTo(
                 new AddFileEntry(
@@ -145,7 +146,8 @@ public class TestCheckpointEntryIterator
                                 "\"nullCount\":{\"name\":0,\"married\":0,\"phones\":0,\"address\":{\"street\":0,\"city\":0,\"state\":0,\"zip\":0},\"income\":0}" +
                                 "}"),
                         Optional.empty(),
-                        null));
+                        null,
+                        Optional.empty()));
     }
 
     @Test
@@ -190,7 +192,8 @@ public class TestCheckpointEntryIterator
                                 "\"nullCount\":{\"name\":0,\"married\":0,\"phones\":0,\"address\":{\"street\":0,\"city\":0,\"state\":0,\"zip\":0},\"income\":0}" +
                                 "}"),
                         Optional.empty(),
-                        null));
+                        null,
+                        Optional.empty()));
 
         // RemoveFileEntry
         assertThat(entries).element(3).extracting(DeltaLakeTransactionLogEntry::getRemove).isEqualTo(

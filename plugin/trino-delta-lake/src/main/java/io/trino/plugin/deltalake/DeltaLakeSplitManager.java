@@ -226,6 +226,7 @@ public class DeltaLakeSplitManager
 
                     return splitsForFile(
                             session,
+                            tableHandle.location(),
                             addAction,
                             splitPath,
                             addAction.getCanonicalPartitionValues(),
@@ -272,6 +273,7 @@ public class DeltaLakeSplitManager
 
     private List<DeltaLakeSplit> splitsForFile(
             ConnectorSession session,
+            String tableLocation,
             AddFileEntry addFileEntry,
             String splitPath,
             Map<String, Optional<String>> partitionKeys,
@@ -284,12 +286,14 @@ public class DeltaLakeSplitManager
         if (!splittable) {
             // remainingInitialSplits is not used when !splittable
             return ImmutableList.of(new DeltaLakeSplit(
+                    tableLocation,
                     splitPath,
                     0,
                     fileSize,
                     fileSize,
                     addFileEntry.getStats().flatMap(DeltaLakeFileStatistics::getNumRecords),
                     addFileEntry.getModificationTime(),
+                    addFileEntry.getDeletionVector(),
                     ImmutableList.of(),
                     SplitWeight.standard(),
                     statisticsPredicate,
@@ -309,12 +313,14 @@ public class DeltaLakeSplitManager
             long splitSize = Math.min(maxSplitSize, fileSize - currentOffset);
 
             splits.add(new DeltaLakeSplit(
+                    tableLocation,
                     splitPath,
                     currentOffset,
                     splitSize,
                     fileSize,
                     Optional.empty(),
                     addFileEntry.getModificationTime(),
+                    addFileEntry.getDeletionVector(),
                     ImmutableList.of(),
                     SplitWeight.fromProportion(Math.min(Math.max((double) splitSize / maxSplitSize, minimumAssignedSplitWeight), 1.0)),
                     statisticsPredicate,

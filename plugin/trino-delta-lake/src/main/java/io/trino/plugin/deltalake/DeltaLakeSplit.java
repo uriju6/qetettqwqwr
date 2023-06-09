@@ -18,6 +18,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.airlift.slice.SizeOf;
+import io.trino.plugin.deltalake.transactionlog.DeletionVectorEntry;
 import io.trino.spi.HostAddress;
 import io.trino.spi.SplitWeight;
 import io.trino.spi.connector.ConnectorSplit;
@@ -40,12 +41,14 @@ public class DeltaLakeSplit
 {
     private static final int INSTANCE_SIZE = instanceSize(DeltaLakeSplit.class);
 
+    private final String tableLocation;
     private final String path;
     private final long start;
     private final long length;
     private final long fileSize;
     private final Optional<Long> fileRowCount;
     private final long fileModifiedTime;
+    private final Optional<DeletionVectorEntry> deletionVector;
     private final List<HostAddress> addresses;
     private final SplitWeight splitWeight;
     private final TupleDomain<DeltaLakeColumnHandle> statisticsPredicate;
@@ -53,23 +56,27 @@ public class DeltaLakeSplit
 
     @JsonCreator
     public DeltaLakeSplit(
+            @JsonProperty("tableLocation") String tableLocation,
             @JsonProperty("path") String path,
             @JsonProperty("start") long start,
             @JsonProperty("length") long length,
             @JsonProperty("fileSize") long fileSize,
             @JsonProperty("rowCount") Optional<Long> fileRowCount,
             @JsonProperty("fileModifiedTime") long fileModifiedTime,
+            @JsonProperty("deletionVector") Optional<DeletionVectorEntry> deletionVector,
             @JsonProperty("addresses") List<HostAddress> addresses,
             @JsonProperty("splitWeight") SplitWeight splitWeight,
             @JsonProperty("statisticsPredicate") TupleDomain<DeltaLakeColumnHandle> statisticsPredicate,
             @JsonProperty("partitionKeys") Map<String, Optional<String>> partitionKeys)
     {
+        this.tableLocation = requireNonNull(tableLocation, "tableLocation is null");
         this.path = requireNonNull(path, "path is null");
         this.start = start;
         this.length = length;
         this.fileSize = fileSize;
         this.fileRowCount = requireNonNull(fileRowCount, "rowCount is null");
         this.fileModifiedTime = fileModifiedTime;
+        this.deletionVector = requireNonNull(deletionVector, "deletionVector is null");
         this.addresses = ImmutableList.copyOf(requireNonNull(addresses, "addresses is null"));
         this.splitWeight = requireNonNull(splitWeight, "splitWeight is null");
         this.statisticsPredicate = requireNonNull(statisticsPredicate, "statisticsPredicate is null");
@@ -94,6 +101,12 @@ public class DeltaLakeSplit
     public SplitWeight getSplitWeight()
     {
         return splitWeight;
+    }
+
+    @JsonProperty
+    public String getTableLocation()
+    {
+        return tableLocation;
     }
 
     @JsonProperty
@@ -132,6 +145,12 @@ public class DeltaLakeSplit
         return fileModifiedTime;
     }
 
+    @JsonProperty
+    public Optional<DeletionVectorEntry> getDeletionVector()
+    {
+        return deletionVector;
+    }
+
     /**
      * A TupleDomain representing the min/max statistics from the file this split was generated from. This does not contain any partitioning information.
      */
@@ -151,8 +170,10 @@ public class DeltaLakeSplit
     public long getRetainedSizeInBytes()
     {
         return INSTANCE_SIZE
+                + estimatedSizeOf(tableLocation)
                 + estimatedSizeOf(path)
                 + sizeOf(fileRowCount, value -> LONG_INSTANCE_SIZE)
+                + sizeOf(deletionVector, DeletionVectorEntry::sizeInBytes)
                 + estimatedSizeOf(addresses, HostAddress::getRetainedSizeInBytes)
                 + splitWeight.getRetainedSizeInBytes()
                 + statisticsPredicate.getRetainedSizeInBytes(DeltaLakeColumnHandle::getRetainedSizeInBytes)
@@ -173,11 +194,13 @@ public class DeltaLakeSplit
     public String toString()
     {
         return toStringHelper(this)
+                .add("tableLocation", tableLocation)
                 .add("path", path)
                 .add("start", start)
                 .add("length", length)
                 .add("fileSize", fileSize)
                 .add("rowCount", fileRowCount)
+                .add("deletionVector", deletionVector)
                 .add("addresses", addresses)
                 .add("statisticsPredicate", statisticsPredicate)
                 .add("partitionKeys", partitionKeys)
@@ -197,8 +220,10 @@ public class DeltaLakeSplit
         return start == that.start &&
                 length == that.length &&
                 fileSize == that.fileSize &&
+                tableLocation.equals(that.tableLocation) &&
                 path.equals(that.path) &&
                 fileRowCount.equals(that.fileRowCount) &&
+                deletionVector.equals(that.deletionVector) &&
                 addresses.equals(that.addresses) &&
                 Objects.equals(statisticsPredicate, that.statisticsPredicate) &&
                 Objects.equals(partitionKeys, that.partitionKeys);
@@ -207,6 +232,6 @@ public class DeltaLakeSplit
     @Override
     public int hashCode()
     {
-        return Objects.hash(path, start, length, fileSize, fileRowCount, addresses, statisticsPredicate, partitionKeys);
+        return Objects.hash(tableLocation, path, start, length, fileSize, fileRowCount, deletionVector, addresses, statisticsPredicate, partitionKeys);
     }
 }

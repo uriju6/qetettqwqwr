@@ -1400,7 +1400,8 @@ public class DeltaLakeMetadata
                             dataChange,
                             Optional.of(serializeStatsAsJson(info.getStatistics())),
                             Optional.empty(),
-                            ImmutableMap.of()));
+                            ImmutableMap.of(),
+                            Optional.empty()));
         }
     }
 
