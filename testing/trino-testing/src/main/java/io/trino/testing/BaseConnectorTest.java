@@ -129,6 +129,7 @@ import static io.trino.testing.TestingConnectorBehavior.SUPPORTS_DELETE;
 import static io.trino.testing.TestingConnectorBehavior.SUPPORTS_DEREFERENCE_PUSHDOWN;
 import static io.trino.testing.TestingConnectorBehavior.SUPPORTS_DROP_COLUMN;
 import static io.trino.testing.TestingConnectorBehavior.SUPPORTS_DROP_FIELD;
+import static io.trino.testing.TestingConnectorBehavior.SUPPORTS_DROP_SCHEMA_CASCADE;
 import static io.trino.testing.TestingConnectorBehavior.SUPPORTS_INSERT;
 import static io.trino.testing.TestingConnectorBehavior.SUPPORTS_MATERIALIZED_VIEW_FRESHNESS_FROM_BASE_TABLES;
 import static io.trino.testing.TestingConnectorBehavior.SUPPORTS_MERGE;
@@ -2348,6 +2349,39 @@ public abstract class BaseConnectorTest
         finally {
             assertUpdate("DROP SCHEMA IF EXISTS " + schemaName);
             assertUpdate("DROP SCHEMA IF EXISTS " + schemaName + "_renamed");
+        }
+    }
+
+    @Test
+    public void testDropSchemaCascade()
+    {
+        if (!hasBehavior(SUPPORTS_DROP_SCHEMA_CASCADE)) {
+            String schemaName = getSession().getSchema().orElseThrow();
+            assertQueryFails(
+                    "DROP SCHEMA " + schemaName + " CASCADE",
+                    "This connector does not support dropping schemas with CASCADE option");
+            return;
+        }
+
+        skipTestUnless(hasBehavior(SUPPORTS_CREATE_SCHEMA) && hasBehavior(SUPPORTS_CREATE_TABLE));
+
+        String schemaName = "test_drop_schema_cascade_" + randomNameSuffix();
+        String firstTableName = "test_first_table" + randomNameSuffix();
+        String secondTableName = "test_second_table" + randomNameSuffix();
+        try {
+            assertUpdate(createSchemaSql(schemaName));
+            assertUpdate("CREATE TABLE " + schemaName + "." + firstTableName + "(a INT)");
+            assertUpdate("CREATE TABLE " + schemaName + "." + secondTableName + "(a INT)");
+
+            assertThat(computeActual("SHOW SCHEMAS").getOnlyColumnAsSet()).contains(schemaName);
+
+            assertUpdate("DROP SCHEMA " + schemaName + " CASCADE");
+            assertThat(computeActual("SHOW SCHEMAS").getOnlyColumnAsSet()).doesNotContain(schemaName);
+        }
+        finally {
+            assertUpdate("DROP TABLE IF EXISTS " + schemaName + "." + firstTableName);
+            assertUpdate("DROP TABLE IF EXISTS " + schemaName + "." + secondTableName);
+            assertUpdate("DROP SCHEMA IF EXISTS " + schemaName);
         }
     }
 
