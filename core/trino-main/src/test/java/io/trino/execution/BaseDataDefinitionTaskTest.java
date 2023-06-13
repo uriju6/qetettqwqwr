@@ -26,6 +26,7 @@ import io.trino.metadata.MaterializedViewDefinition;
 import io.trino.metadata.MaterializedViewPropertyManager;
 import io.trino.metadata.MetadataManager;
 import io.trino.metadata.QualifiedObjectName;
+import io.trino.metadata.QualifiedTablePrefix;
 import io.trino.metadata.ResolvedFunction;
 import io.trino.metadata.TableHandle;
 import io.trino.metadata.TableMetadata;
@@ -40,6 +41,7 @@ import io.trino.spi.connector.CatalogSchemaName;
 import io.trino.spi.connector.CatalogSchemaTableName;
 import io.trino.spi.connector.ColumnHandle;
 import io.trino.spi.connector.ColumnMetadata;
+import io.trino.spi.connector.ConnectorCapabilities;
 import io.trino.spi.connector.ConnectorTableMetadata;
 import io.trino.spi.connector.MaterializedViewNotFoundException;
 import io.trino.spi.connector.SchemaTableName;
@@ -67,8 +69,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -241,6 +245,7 @@ public abstract class BaseDataDefinitionTaskTest
     {
         private final MetadataManager delegate;
         private final String catalogName;
+        private final Set<ConnectorCapabilities> capabilities = new CopyOnWriteArraySet<>();
         private final List<CatalogSchemaName> schemas = new CopyOnWriteArrayList<>();
         private final AtomicBoolean failCreateSchema = new AtomicBoolean();
         private final Map<SchemaTableName, ConnectorTableMetadata> tables = new ConcurrentHashMap<>();
@@ -260,6 +265,17 @@ public abstract class BaseDataDefinitionTaskTest
                 return Optional.of(TEST_CATALOG_HANDLE);
             }
             return Optional.empty();
+        }
+
+        @Override
+        public Set<ConnectorCapabilities> getConnectorCapabilities(Session session, CatalogHandle catalogHandle)
+        {
+            return capabilities;
+        }
+
+        public void addCapability(ConnectorCapabilities capability)
+        {
+            capabilities.add(capability);
         }
 
         public void failCreateSchema()
@@ -283,6 +299,28 @@ public abstract class BaseDataDefinitionTaskTest
                 throw new TrinoException(ALREADY_EXISTS, "Schema already exists");
             }
             schemas.add(schema);
+        }
+
+        @Override
+        public void dropSchema(Session session, CatalogSchemaName schema, boolean cascade)
+        {
+            if (cascade) {
+                tables.keySet().stream()
+                        .filter(table -> schema.getSchemaName().equals(table.getSchemaName()))
+                        .forEach(tables::remove);
+            }
+            schemas.remove(schema);
+        }
+
+        @Override
+        public List<QualifiedObjectName> listTables(Session session, QualifiedTablePrefix prefix)
+        {
+            List<QualifiedObjectName> tables = ImmutableList.<QualifiedObjectName>builder()
+                    .addAll(this.tables.keySet().stream().map(table -> new QualifiedObjectName(catalogName, table.getSchemaName(), table.getTableName())).collect(toImmutableList()))
+                    .addAll(this.views.keySet().stream().map(view -> new QualifiedObjectName(catalogName, view.getSchemaName(), view.getTableName())).collect(toImmutableList()))
+                    .addAll(this.materializedViews.keySet().stream().map(mv -> new QualifiedObjectName(catalogName, mv.getSchemaName(), mv.getTableName())).collect(toImmutableList()))
+                    .build();
+            return tables.stream().filter(prefix::matches).collect(toImmutableList());
         }
 
         @Override
